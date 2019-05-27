@@ -1,0 +1,336 @@
+import sys
+import csv
+import numpy as np
+from PyQt4 import QtGui, QtCore
+from PyQt4.QtGui import QApplication
+from PyQt4.QtCore import *
+from PyQt4.QtGui  import *
+#import AA__main__v7
+from PyQt4.QtCore import pyqtSlot
+
+from BA__txt_to_csv__v5                         import txt_to_csv_def       as convert_txt_to_csv
+from CA__modelClassifyProblem__csv_to_array__v5 import csv_to_array_def     as import_csv_for_classification
+from CB__TF_trainModel__v9                      import array_to_TF_def      as train_model_classification
+from DA__modelIndentSize__csv_to_array__v5      import csv_to_array_def     as import_csv_for_indent
+from DB__TF_trainModel__v9                      import array_to_TF_def      as train_model_indent
+from EA__prepForPredClass__csv_to_array__v5     import csv_to_array_def     as import_csv_to_predict_classification
+from EB__predictClassification__v4              import TF_to_prediction_def as predict_classification
+#from FA__prepForPredIndent__csv_to_array__v5    import csv_to_array_def     as import_csv_to_predict_indent
+from FB__predictIndent__v4                      import TF_to_prediction_def as predict_indent
+
+#Might move this script to it's own file.
+from CB__TF_trainModel__v9 import reset as reset_tf
+
+class Window(QtGui.QMainWindow):
+    def __init__(self):
+        super(Window, self).__init__()
+        self.setGeometry(400, 200, 1200, 800)
+        self.setFixedSize(1200,800)
+        self.setWindowTitle("Tensorflow")
+        self.setWindowIcon(QtGui.QIcon('chat.png'))
+
+        extractAction = QtGui.QAction("&Exit", self)
+        extractAction.setShortcut("Ctrl+Q")
+        extractAction.setStatusTip('Leave The App')
+        extractAction.triggered.connect(self.close_application)
+
+        openAbout = QtGui.QAction("&About", self)
+        openAbout.setShortcut("Ctrl+E")
+        openAbout.setStatusTip('About')
+        openAbout.triggered.connect(self.open_About)
+
+        openFile = QtGui.QAction("&Open File", self)
+        openFile.setShortcut("Ctrl+O")
+        openFile.setStatusTip('Open File')
+        openFile.triggered.connect(self.file_open)
+
+        saveFile = QtGui.QAction("&Save File", self)
+        saveFile.setShortcut("Ctrl+S")
+        saveFile.setStatusTip('Save File')
+        saveFile.triggered.connect(self.file_save)
+
+        self.statusBar()
+
+        #Creating the manubar and adding a filemenu
+        mainMenu = self.menuBar()
+        fileMenu = mainMenu.addMenu('&File')
+        fileMenu.addAction(extractAction)
+        fileMenu.addAction(openFile)
+        fileMenu.addAction(saveFile)
+        editorMenu = mainMenu.addMenu("&About")
+        editorMenu.addAction(openAbout)
+
+        self.home()
+
+
+
+
+    def home(self):
+
+        btn = QtGui.QPushButton("Quit", self)
+        btn.clicked.connect(self.close_application)
+        btn.resize(btn.minimumSizeHint())
+        btn.setFixedSize(100,30)
+        btn.move(600, 772)
+
+        self.textbox = QtGui.QLineEdit("Output")
+        
+        self.textbox.move(500, 100)
+        self.textbox.resize(280, 40)
+
+
+        extractAction = QtGui.QAction(QtGui.QIcon('chat.png'), 'Exit', self)
+        extractAction.triggered.connect(self.close_application)
+
+        self.toolBar = self.addToolBar("Exit")
+        self.toolBar.addAction(extractAction)
+
+        self.predict = QtGui.QPushButton("Predict", self)
+        self.predict.move(500, 772)
+        self.predict.setFixedSize(100,30)
+        self.predict.clicked.connect(self.predict_model)
+
+
+        self.trainModel = QtGui.QPushButton("Train Model", self)
+        self.trainModel.move(400, 772)
+        self.trainModel.setFixedSize(100,30)
+        self.trainModel.clicked.connect(self.train_model_clicked)
+
+
+        self.convert = QtGui.QPushButton("Convert", self)
+        self.convert.move(300, 772)
+        self.convert.setFixedSize(100,30)
+        self.convert.clicked.connect(self.convert_clicked)
+
+
+        self.showConvertlabel = QtGui.QLabel("", self)
+        self.showConvertlabel.move(100, 55)
+
+        self.updatinglabel = QtGui.QLabel("", self)
+        self.updatinglabel.move(200, 95)
+        self.updatinglabel2 = QtGui.QLabel("", self)
+        self.updatinglabel2.move(250, 95)
+
+        self.progress = QtGui.QProgressBar(self)
+        self.progress.setGeometry(200, 80, 250, 20)
+        self.progress.hide()
+
+        self.show()
+
+
+
+    def file_open(self):
+        name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        file = open(name, 'r')
+
+    def file_save(self):
+        name = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+        file = open(name, 'w')
+
+    def open_About(self):
+        choice = QtGui.QMessageBox.question(self, 'About',
+                                            "Still under testing\nDesigned by: Fredrik Kvist, Eirik K. Kjevik and Silja Svensson",
+                                            QtGui.QMessageBox.Ok)
+        if choice == QtGui.QMessageBox.Ok:
+            print("About clicked")
+            pass
+        else:
+            pass
+
+    def train_model_clicked(self):
+
+        # .ckpt-fil
+        fil_navn = "model_fault_inner_v1.ckpt"
+        iteration_number = 0
+
+        class_feature = []
+        class_label = []
+        newBatch_feat = []
+        newBatch_lab = []
+        newSvar_feat = []
+        newSvar_lab = []
+        class_precent = 0.85
+
+        class_gradient_length = 0.000001  # Change to change to the learningsteps
+        class_print_intermidiate_values_train = False
+        class_print_intermidiate_values_test = False
+        class_print_error_rate = True
+        class_print_graph = True
+        class_new_file = False  # False = opprett ny fil
+        # True  = last gammel fil med navn 'fil_navn'
+
+        indent_feature = []
+        indent_label = []
+
+        indent_gradient_length = 0.000001  # Change to change to the learningsteps
+        indent_print_intermidiate_values_train = False
+        indent_print_intermidiate_values_test = False
+        indent_print_error_rate = True
+        indent_print_graph = True
+        indent_new_file = False  # False = opprett ny fil
+        indent_percent = 0.85
+        # True  = last gammel fil med navn 'fil_navn'
+
+
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText('Where is the damage located?')
+        inner_btn = QtGui.QPushButton("Innerring")
+        outer_btn = QtGui.QPushButton("Outerring")
+        ball_btn = QtGui.QPushButton("Ball")
+        base_btn = QtGui.QPushButton("No damage")
+        cancel_btn = QtGui.QPushButton("Cancel")
+        msgBox.addButton(inner_btn, QtGui.QMessageBox.YesRole)
+        msgBox.addButton(outer_btn, QtGui.QMessageBox.YesRole)
+        msgBox.addButton(ball_btn, QtGui.QMessageBox.YesRole)
+        msgBox.addButton(base_btn, QtGui.QMessageBox.YesRole)
+        msgBox.addButton(cancel_btn, QtGui.QMessageBox.RejectRole)
+
+        msgBox_2 = QtGui.QMessageBox()
+        msgBox_2.setText('Do you wish to add another set of files')
+        yes_btn = QtGui.QPushButton("Yes")
+        no_btn = QtGui.QPushButton("No")
+        msgBox_2.addButton(yes_btn, QtGui.QMessageBox.YesRole)
+        msgBox_2.addButton(no_btn, QtGui.QMessageBox.YesRole)
+
+        msgBox_3 = QtGui.QMessageBox()
+        msgBox_3.setText('Which model would you like to train?')
+        classification_btn  = QtGui.QPushButton("Classification model")
+        indent_btn = QtGui.QPushButton("Indentation model")
+        help_btn = QtGui.QPushButton("Help")
+        cancel_model_btn = QtGui.QPushButton("Cancel")
+        msgBox_3.addButton(classification_btn, QtGui.QMessageBox.YesRole)
+        msgBox_3.addButton(indent_btn, QtGui.QMessageBox.YesRole)
+        msgBox_3.addButton(help_btn, QtGui.QMessageBox.YesRole)
+        msgBox_3.addButton(cancel_model_btn, QtGui.QMessageBox.YesRole)
+
+
+
+        choosemodel = msgBox_3.exec_()
+        if msgBox_3.clickedButton() == classification_btn:
+            continue_append = True
+
+            while continue_append:
+
+                class_feature.append(QtGui.QFileDialog.getOpenFileName(self, 'Open File'))
+
+                ret = msgBox.exec_()
+                if msgBox.clickedButton() == inner_btn:
+                    class_label.append([0, 0, 1, 0])
+                if msgBox.clickedButton() == outer_btn:
+                    class_label.append([0, 1, 0, 0])
+                if msgBox.clickedButton() == ball_btn:
+                    class_label.append([0, 0, 0, 1])
+                if msgBox.clickedButton() == base_btn:
+                    class_label.append([1, 0, 0, 0])
+                if msgBox.clickedButton() == cancel_btn:
+                    print("Cancel")
+                check = msgBox_2.exec_()
+                if msgBox_2.clickedButton() == no_btn:
+                    continue_append = False
+            self.progress.show()
+            self.progress.setMaximum(0)
+            self.progress.setMinimum(0)
+
+            newBatch_feat, newBatch_lab, newSvar_feat, newSvar_lab = import_csv_for_classification(class_feature,
+                                                                                                   class_label,
+                                                                                                   class_precent)
+
+            class_train_tuplet = newBatch_feat, newBatch_lab, newSvar_feat, newSvar_lab, class_gradient_length, class_print_intermidiate_values_train, \
+                                 class_print_intermidiate_values_test, class_print_error_rate, class_print_graph, fil_navn, iteration_number, class_new_file
+            reset_tf()
+            train_model_classification(class_train_tuplet)
+            self.progress.hide()
+        elif msgBox_3.clickedButton() == indent_btn:
+            continue_append = True
+
+            while continue_append:
+
+                indent_feature.append(QtGui.QFileDialog.getOpenFileName(self, 'Open File'))
+
+                num, ok = QInputDialog.getInt(self, "Set damage", "Enter a indent in millimeters")
+
+                if ok:
+                    indent_label.append([num])
+                    #self.le2.setText(str(num))
+                check = msgBox_2.exec_()
+                if msgBox_2.clickedButton() == no_btn:
+                    continue_append = False
+            self.progress.show()
+            self.progress.setMaximum(0)
+            self.progress.setMinimum(0)
+            newBatch_feat, newBatch_lab, newSvar_feat, newSvar_lab = import_csv_for_indent(indent_feature, indent_label, indent_percent)
+            indent_train_tuplet = newBatch_feat, newBatch_lab, newSvar_feat, newSvar_lab, indent_gradient_length, indent_print_intermidiate_values_train, \
+                                  indent_print_intermidiate_values_test, indent_print_error_rate, indent_print_graph, fil_navn, iteration_number, indent_new_file
+            reset_tf()
+            train_model_indent(indent_train_tuplet)
+            self.progress.hide()
+
+    def predict_model(self):
+
+        class_model_name =  QtGui.QFileDialog.getOpenFileName(self, 'Open CKPT File')
+        if class_model_name.endswith('.meta'):
+            class_model_name = class_model_name[:-5]
+        if class_model_name.endswith('.index'):
+            class_model_name = class_model_name[:-6]
+        if class_model_name.endswith('.data-00000-of-00001'):
+            class_model_name = class_model_name[:-20]
+        print (class_model_name)
+
+        class_model_label_shape = []
+        class_model_label_shape.append(
+            [0, 0, 0, 0])  # The values is not important, but it needs to represent the shape of the labels.
+
+        class_pred_file = QtGui.QFileDialog.getOpenFileName(self, 'Open CSV File')
+        newBatch_feat = import_csv_to_predict_classification(class_pred_file)
+        class_predict_tuplet = newBatch_feat, class_model_label_shape, class_model_name
+
+        reset_tf()
+        predict_classification(class_predict_tuplet)
+
+        indent_model_name = QtGui.QFileDialog.getOpenFileName(self, 'Open CKPT File')
+        if indent_model_name.endswith('.meta'):
+            indent_model_name = indent_model_name[:-5]
+        if indent_model_name.endswith('.index'):
+            indent_model_name = indent_model_name[:-6]
+        if indent_model_name.endswith('.data-00000-of-00001'):
+            indent_model_name = indent_model_name[:-20]
+        indent_predict_tuplet = []
+        indent_model_label_shape = []
+        indent_model_label_shape.append(
+            [0])  # The values is not important, but it needs to represent the shape of the labels.
+
+        indent_predict_tuplet = newBatch_feat, indent_model_label_shape, \
+                                indent_model_name
+        reset_tf()
+        predict_indent(indent_predict_tuplet)
+
+    def convert_clicked(self):
+        number_of_features = 500
+        # Using try in case user types in unknown file or closes without choosing a file.
+        try:
+            name_input_txt = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+
+            name_output_csv = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+
+            convert_txt_to_csv(number_of_features, name_input_txt, name_output_csv)
+
+        except:
+            print("No files exists")
+
+
+    def close_application(self):
+        choice = QtGui.QMessageBox.question(self, 'Exit',
+                                            "Are you sure you want to quit?",
+                                            QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        if choice == QtGui.QMessageBox.Yes:
+            print("EXIT!!!!")
+            sys.exit()
+        else:
+            pass
+
+def run():
+    app = QtGui.QApplication(sys.argv)
+    GUI = Window()
+    sys.exit(app.exec_())
+
+run()

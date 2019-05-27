@@ -1,0 +1,171 @@
+import sys
+import csv
+import numpy as np
+from PyQt4 import QtGui, QtCore
+from PyQt4.QtGui import QApplication
+
+
+class Window(QtGui.QMainWindow):
+    def __init__(self):
+        super(Window, self).__init__()
+        self.setGeometry(50, 50, 500, 300)
+        self.setWindowTitle("Tensorflow")
+        self.setWindowIcon(QtGui.QIcon('chat.png'))
+
+        extractAction = QtGui.QAction("&Exit", self)
+        extractAction.setShortcut("Ctrl+Q")
+        extractAction.setStatusTip('Leave The App')
+        extractAction.triggered.connect(self.close_application)
+
+        openAbout = QtGui.QAction("&About", self)
+        openAbout.setShortcut("Ctrl+E")
+        openAbout.setStatusTip('About')
+        openAbout.triggered.connect(self.open_About)
+
+        openFile = QtGui.QAction("&Open File", self)
+        openFile.setShortcut("Ctrl+O")
+        openFile.setStatusTip('Open File')
+        openFile.triggered.connect(self.file_open)
+
+        saveFile = QtGui.QAction("&Save File", self)
+        saveFile.setShortcut("Ctrl+S")
+        saveFile.setStatusTip('Save File')
+        saveFile.triggered.connect(self.file_save)
+
+        self.statusBar()
+
+        mainMenu = self.menuBar()
+
+        fileMenu = mainMenu.addMenu('&File')
+        fileMenu.addAction(extractAction)
+        fileMenu.addAction(openFile)
+        fileMenu.addAction(saveFile)
+
+        editorMenu = mainMenu.addMenu("&About")
+        editorMenu.addAction(openAbout)
+        self.progress = QtGui.QProgressBar(self)
+        self.progress.setGeometry(200, 80, 250, 20)
+
+        self.home()
+
+    def home(self):
+        btn = QtGui.QPushButton("Quit", self)
+        btn.clicked.connect(self.close_application)
+        btn.resize(btn.minimumSizeHint())
+        btn.move(0, 100)
+
+        extractAction = QtGui.QAction(QtGui.QIcon('chat.png'), 'Exit', self)
+        extractAction.triggered.connect(self.close_application)
+
+        self.toolBar = self.addToolBar("Exit")
+        self.toolBar.addAction(extractAction)
+
+        self.predict = QtGui.QPushButton("Predict", self)
+        self.predict.move(400, 120)
+
+        self.trainModel = QtGui.QPushButton("Train Model", self)
+        self.trainModel.move(300, 120)
+       # self.trainModel.clicked(self.Train_model_clicked)
+
+        self.convert = QtGui.QPushButton("Convert", self)
+        self.convert.move(200, 120)
+        self.convert.clicked.connect(self.Convert_clicked)
+
+        self.showConvertlabel = QtGui.QLabel("", self)
+        self.showConvertlabel.move(100, 55)
+
+        self.updatinglabel = QtGui.QLabel("", self)
+        self.updatinglabel.move(200, 95)
+        self.updatinglabel2 = QtGui.QLabel("", self)
+        self.updatinglabel2.move(250, 95)
+
+        self.show()
+   # def Train_model_clicked(self):
+
+
+    def file_open(self):
+        name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        file = open(name, 'r')
+
+    def file_save(self):
+        name = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+        file = open(name, 'w')
+
+    def open_About(self):
+        choice = QtGui.QMessageBox.question(self, 'About',
+                                            "This program is still under testing\nDesigned by: Fredrik Kvist, Eirik K. Kjevik and Silja Svensson",
+                                            QtGui.QMessageBox.Ok)
+        if choice == QtGui.QMessageBox.Ok:
+            print("About clicked")
+            pass
+        else:
+            pass
+
+    def Convert_clicked(self):
+        ### KONTROLLPANELET ###
+
+        number_of_features = 500
+        # Using try in case user types in unknown file or closes without choosing a file.
+        name_input_txt = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        self.progress = QtGui.QProgressBar(self)
+        self.progress.setGeometry(200, 80, 250, 20)
+        self.progress.setMaximum(0)
+        self.progress.setMinimum(0)
+
+        try:
+            with open(name_input_txt, 'r') as UseFile:
+                print(UseFile.read())
+            name_output_csv = QtGui.QFileDialog.getSaveFileName(self, 'Save File')
+        except:
+            print("No file exists")
+
+        try:
+            with open(name_output_csv, 'r') as SaveFile:
+                print(SaveFile.read())
+        except:
+            print("No file created")
+
+
+        importer = []
+        nyImporter = []
+        i = 0
+
+        with open(name_input_txt) as inputfile:
+            for line in inputfile:
+                importer.append(line.strip().split())
+
+                nyImporter = nyImporter + importer[i]
+                i = i + 1
+
+                print('Number of imported values: %d' % i)
+                QApplication.processEvents()
+                self.showConvertlabel.setText("Converting file to CSV format    ")
+                self.updatinglabel.setText(str(i))# + " of " + str(len(name_input_txt)))
+                self.updatinglabel2.setText("values imported")
+
+        inputfile.close()
+        data = np.asarray(nyImporter)
+        chunks = [data[x:x + number_of_features] for x in range(0, len(data), number_of_features)]
+        print("Chunks created.")
+        # Remove progressbar and label when prosess is done
+
+        with open(name_output_csv, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(chunks)
+
+    def close_application(self):
+        choice = QtGui.QMessageBox.question(self, 'Exit',
+                                            "Are you sure you want to quit?",
+                                            QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        if choice == QtGui.QMessageBox.Yes:
+            print("EXIT!!!!")
+            sys.exit()
+        else:
+            pass
+
+def run():
+    app = QtGui.QApplication(sys.argv)
+    GUI = Window()
+    sys.exit(app.exec_())
+
+run()
